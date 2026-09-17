@@ -1,6 +1,12 @@
 package middleware
 
-import "errors"
+import (
+	"context"
+	"errors"
+	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
 
 var (
 	ErrMessageMiddlewareMessage      = errors.New("message middleware: message error")
@@ -42,4 +48,105 @@ type Middleware interface {
 	//Se desconecta de la cola o exchange al que estaba conectado.
 	//Si ocurre un error interno que no puede resolverse devuelve ErrMessageMiddlewareClose.
 	Close() error
+}
+
+type QueueMiddleware struct {
+	conn        *amqp.Connection
+	ch          *amqp.Channel
+	queueName   string
+	consumerTag string
+}
+
+func NewQueueMiddleware(conn *amqp.Connection, ch *amqp.Channel, queueName string) *QueueMiddleware {
+	return &QueueMiddleware{
+		conn:      conn,
+		ch:        ch,
+		queueName: queueName,
+	}
+}
+
+func (q *QueueMiddleware) Close() error {
+	if q.ch != nil {
+		err := q.ch.Close()
+		if err != nil && err != amqp.ErrClosed {
+			return ErrMessageMiddlewareClose
+		}
+	}
+
+	if q.conn != nil {
+		err := q.conn.Close()
+		if err != nil && err != amqp.ErrClosed {
+			return ErrMessageMiddlewareClose
+		}
+	}
+
+	return nil
+}
+
+func (q *QueueMiddleware) StartConsuming(callbackFunc func(msg Message, ack func(), nack func())) error {
+	if q.ch == nil {
+		q.Close()
+		return ErrMessageMiddlewareDisconnected
+	}
+
+	q.consumerTag = "consumer-" + q.queueName
+
+	msgs, err := q.ch.Consume(
+		q.queueName,   // queue
+		q.consumerTag, // consumer
+		false,         // auto-ack
+		false,         // exclusive
+		false,         // no-local
+		false,         // no-wait
+		nil,           // args
+	)
+	if err != nil {
+		q.Close()
+		return ErrMessageMiddlewareMessage
+	}
+
+	go func() {
+		for d := range msgs {
+			callbackFunc(Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
+		}
+	}()
+	return nil
+}
+
+func (q *QueueMiddleware) StopConsuming() error {
+	if q.ch == nil {
+		q.Close()
+		return ErrMessageMiddlewareDisconnected
+	}
+
+	if q.consumerTag != "" {
+		return q.ch.Cancel(q.consumerTag, false)
+	}
+	return nil
+}
+
+func (q *QueueMiddleware) Send(msg Message) error {
+	if q.ch == nil {
+		q.Close()
+		return ErrMessageMiddlewareDisconnected
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := q.ch.PublishWithContext(ctx,
+		"",          // exchange
+		q.queueName, // routing key
+		false,       // mandatory
+		false,       // immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        []byte(msg.Body),
+		})
+	if err != nil {
+		q.Close()
+		return ErrMessageMiddlewareMessage
+	}
+	return nil
+
 }
