@@ -7,18 +7,26 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func CreateQueueMiddleware(queueName string, connectionSettings m.ConnSettings) (m.Middleware, error) {
+func connect(connectionSettings m.ConnSettings) (*amqp.Connection, *amqp.Channel, error) {
 	url := fmt.Sprintf("amqp://guest:guest@%s:%d/", connectionSettings.Hostname, connectionSettings.Port)
 
 	conn, err := amqp.Dial(url)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ch, err := conn.Channel()
 
 	if err != nil {
 		conn.Close()
+		return nil, nil, err
+	}
+	return conn, ch, nil
+}
+
+func CreateQueueMiddleware(queueName string, connectionSettings m.ConnSettings) (m.Middleware, error) {
+	conn, ch, err := connect(connectionSettings)
+	if err != nil {
 		return nil, err
 	}
 
@@ -43,17 +51,8 @@ func CreateQueueMiddleware(queueName string, connectionSettings m.ConnSettings) 
 }
 
 func CreateExchangeMiddleware(exchangeName string, keys []string, connectionSettings m.ConnSettings) (m.Middleware, error) {
-	url := fmt.Sprintf("amqp://guest:guest@%s:%d/", connectionSettings.Hostname, connectionSettings.Port)
-
-	conn, err := amqp.Dial(url)
+	conn, ch, err := connect(connectionSettings)
 	if err != nil {
-		return nil, err
-	}
-
-	ch, err := conn.Channel()
-
-	if err != nil {
-		conn.Close()
 		return nil, err
 	}
 
