@@ -45,7 +45,7 @@ func CreateQueueMiddleware(queueName string, connectionSettings m.ConnSettings) 
 		return nil, err
 	}
 
-	queue := m.NewQueueMiddleware(conn, ch, q.Name)
+	queue := NewQueueMiddleware(conn, ch, q.Name)
 
 	return queue, nil
 }
@@ -71,7 +71,7 @@ func CreateExchangeMiddleware(exchangeName string, keys []string, connectionSett
 		return nil, err
 	}
 
-	exchange := m.NewExchangeMiddleware(conn, ch, exchangeName, keys)
+	exchange := NewExchangeMiddleware(conn, ch, exchangeName, keys)
 
 	return exchange, nil
 }

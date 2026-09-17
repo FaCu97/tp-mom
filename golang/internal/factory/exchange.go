@@ -1,10 +1,11 @@
-package middleware
+package factory
 
 import (
 	"context"
 	"fmt"
 	"time"
 
+	m "github.com/7574-sistemas-distribuidos/tp-mom/golang/internal/middleware"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -32,24 +33,24 @@ func (e *ExchangeMiddleware) Close() error {
 	if e.ch != nil {
 		err := e.ch.Close()
 		if err != nil && err != amqp.ErrClosed {
-			return ErrMessageMiddlewareClose
+			return m.ErrMessageMiddlewareClose
 		}
 	}
 
 	if e.conn != nil {
 		err := e.conn.Close()
 		if err != nil && err != amqp.ErrClosed {
-			return ErrMessageMiddlewareClose
+			return m.ErrMessageMiddlewareClose
 		}
 	}
 
 	return nil
 }
 
-func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack func(), nack func())) error {
+func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg m.Message, ack func(), nack func())) error {
 	if e.ch == nil {
 		e.Close()
-		return ErrMessageMiddlewareDisconnected
+		return m.ErrMessageMiddlewareDisconnected
 	}
 
 	// Declarar y bindear la cola solo la primera vez que se consume
@@ -65,7 +66,7 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 
 		if err != nil {
 			e.Close()
-			return ErrMessageMiddlewareMessage
+			return m.ErrMessageMiddlewareMessage
 		}
 		e.queueName = queue.Name
 
@@ -78,7 +79,7 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 				nil)
 			if err != nil {
 				e.Close()
-				return ErrMessageMiddlewareMessage
+				return m.ErrMessageMiddlewareMessage
 			}
 		}
 	}
@@ -96,12 +97,12 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 	)
 	if err != nil {
 		e.Close()
-		return ErrMessageMiddlewareMessage
+		return m.ErrMessageMiddlewareMessage
 	}
 
 	go func() {
 		for d := range msgs {
-			callbackFunc(Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
+			callbackFunc(m.Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
 		}
 	}()
 	return nil
@@ -110,7 +111,7 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 func (e *ExchangeMiddleware) StopConsuming() error {
 	if e.ch == nil {
 		e.Close()
-		return ErrMessageMiddlewareDisconnected
+		return m.ErrMessageMiddlewareDisconnected
 	}
 
 	if e.ConsumerTag != "" {
@@ -119,10 +120,10 @@ func (e *ExchangeMiddleware) StopConsuming() error {
 	return nil
 }
 
-func (e *ExchangeMiddleware) Send(msg Message) error {
+func (e *ExchangeMiddleware) Send(msg m.Message) error {
 	if e.ch == nil {
 		e.Close()
-		return ErrMessageMiddlewareDisconnected
+		return m.ErrMessageMiddlewareDisconnected
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -140,7 +141,7 @@ func (e *ExchangeMiddleware) Send(msg Message) error {
 			})
 		if err != nil {
 			e.Close()
-			return ErrMessageMiddlewareMessage
+			return m.ErrMessageMiddlewareMessage
 		}
 	}
 	return nil
