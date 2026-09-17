@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -89,7 +90,7 @@ func (e *QueueMiddleware) StartConsuming(callbackFunc func(msg Message, ack func
 		return ErrMessageMiddlewareDisconnected
 	}
 
-	e.consumerTag = "consumer-" + e.queueName
+	e.consumerTag = fmt.Sprintf("consumer-%s-%d", e.queueName, time.Now().UnixNano())
 
 	msgs, err := e.ch.Consume(
 		e.queueName,   // queue
@@ -157,6 +158,7 @@ type ExchangeMiddleware struct {
 	exchangeName string
 	routingKeys  []string
 	ConsumerTag  string
+	queueName    string
 }
 
 func NewExchangeMiddleware(conn *amqp.Connection, ch *amqp.Channel, exchangeName string, keys []string) *ExchangeMiddleware {
@@ -166,6 +168,7 @@ func NewExchangeMiddleware(conn *amqp.Connection, ch *amqp.Channel, exchangeName
 		exchangeName: exchangeName,
 		routingKeys:  keys,
 		ConsumerTag:  "",
+		queueName:    "",
 	}
 }
 
@@ -193,41 +196,40 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 		return ErrMessageMiddlewareDisconnected
 	}
 
-	queue, err := e.ch.QueueDeclare(
-		"",    // name
-		false, // durability
-		false, // delete when unused
-		true,  // exclusive
-		false, // no-wait
-		nil,   // arguments
-	)
+	if e.queueName == "" {
+		queue, err := e.ch.QueueDeclare(
+			"",    // name
+			false, // durability
+			false, // delete when unused
+			true,  // exclusive
+			false, // no-wait
+			nil,   // arguments
+		)
 
-	if err != nil {
-		e.Close()
-		return ErrMessageMiddlewareMessage
-	}
-	e.ConsumerTag = "consumer-" + queue.Name
-
-	if e.ch == nil {
-		e.Close()
-		return ErrMessageMiddlewareDisconnected
-	}
-
-	for _, key := range e.routingKeys {
-		err = e.ch.QueueBind(
-			queue.Name,     // queue name
-			key,            // routing key
-			e.exchangeName, // exchange
-			false,
-			nil)
 		if err != nil {
 			e.Close()
 			return ErrMessageMiddlewareMessage
 		}
+		e.queueName = queue.Name
+
+		for _, key := range e.routingKeys {
+			err = e.ch.QueueBind(
+				e.queueName,    // queue name
+				key,            // routing key
+				e.exchangeName, // exchange
+				false,
+				nil)
+			if err != nil {
+				e.Close()
+				return ErrMessageMiddlewareMessage
+			}
+		}
 	}
 
+	e.ConsumerTag = fmt.Sprintf("consumer-%s-%d", e.queueName, time.Now().UnixNano())
+
 	msgs, err := e.ch.Consume(
-		queue.Name,    // queue
+		e.queueName,   // queue
 		e.ConsumerTag, // consumer
 		false,         // auto-ack
 		false,         // exclusive
