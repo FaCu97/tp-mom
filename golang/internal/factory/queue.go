@@ -11,7 +11,7 @@ import (
 
 type QueueMiddleware struct {
 	baseMiddleware
-	queueName   string
+	queueName string
 }
 
 func NewQueueMiddleware(conn *amqp.Connection, ch *amqp.Channel, queueName string) *QueueMiddleware {
@@ -31,6 +31,16 @@ func (e *QueueMiddleware) StartConsuming(callbackFunc func(msg m.Message, ack fu
 	}
 
 	e.consumerTag = fmt.Sprintf("consumer-%s-%d", e.queueName, time.Now().UnixNano())
+
+	err := e.ch.Qos(
+		10,    // prefetch count
+		0,     // prefetch size
+		false, // global
+	)
+	if err != nil {
+		e.Close()
+		return m.ErrMessageMiddlewareMessage
+	}
 
 	msgs, err := e.ch.Consume(
 		e.queueName,   // queue
@@ -69,8 +79,9 @@ func (e *QueueMiddleware) Send(msg m.Message) error {
 		false,       // mandatory
 		false,       // immediate
 		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(msg.Body),
+			DeliveryMode: amqp.Persistent,
+			ContentType:  "text/plain",
+			Body:         []byte(msg.Body),
 		})
 	if err != nil {
 		e.Close()
