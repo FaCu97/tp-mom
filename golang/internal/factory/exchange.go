@@ -10,41 +10,22 @@ import (
 )
 
 type ExchangeMiddleware struct {
-	conn         *amqp.Connection
-	ch           *amqp.Channel
+	baseMiddleware
 	exchangeName string
 	routingKeys  []string
-	ConsumerTag  string
 	queueName    string
 }
 
 func NewExchangeMiddleware(conn *amqp.Connection, ch *amqp.Channel, exchangeName string, keys []string) *ExchangeMiddleware {
 	return &ExchangeMiddleware{
-		conn:         conn,
-		ch:           ch,
+		baseMiddleware: baseMiddleware{
+			conn: conn,
+			ch:   ch,
+		},
 		exchangeName: exchangeName,
 		routingKeys:  keys,
-		ConsumerTag:  "",
 		queueName:    "",
 	}
-}
-
-func (e *ExchangeMiddleware) Close() error {
-	if e.ch != nil {
-		err := e.ch.Close()
-		if err != nil && err != amqp.ErrClosed {
-			return m.ErrMessageMiddlewareClose
-		}
-	}
-
-	if e.conn != nil {
-		err := e.conn.Close()
-		if err != nil && err != amqp.ErrClosed {
-			return m.ErrMessageMiddlewareClose
-		}
-	}
-
-	return nil
 }
 
 func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg m.Message, ack func(), nack func())) error {
@@ -84,11 +65,11 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg m.Message, ack
 		}
 	}
 
-	e.ConsumerTag = fmt.Sprintf("consumer-%s-%d", e.queueName, time.Now().UnixNano())
+	e.consumerTag = fmt.Sprintf("consumer-%s-%d", e.queueName, time.Now().UnixNano())
 
 	msgs, err := e.ch.Consume(
 		e.queueName,   // queue
-		e.ConsumerTag, // consumer
+		e.consumerTag, // consumer
 		false,         // auto-ack
 		false,         // exclusive
 		false,         // no-local
@@ -105,21 +86,6 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg m.Message, ack
 			callbackFunc(m.Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
 		}
 	}()
-	return nil
-}
-
-func (e *ExchangeMiddleware) StopConsuming() error {
-	if e.ch == nil {
-		e.Close()
-		return m.ErrMessageMiddlewareDisconnected
-	}
-
-	if e.ConsumerTag != "" {
-		err := e.ch.Cancel(e.ConsumerTag, false)
-		if err != nil {
-			return m.ErrMessageMiddlewareDisconnected
-		}
-	}
 	return nil
 }
 

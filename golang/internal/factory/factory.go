@@ -27,7 +27,7 @@ func connect(connectionSettings m.ConnSettings) (*amqp.Connection, *amqp.Channel
 func CreateQueueMiddleware(queueName string, connectionSettings m.ConnSettings) (m.Middleware, error) {
 	conn, ch, err := connect(connectionSettings)
 	if err != nil {
-		return nil, err
+		return nil, m.ErrMessageMiddlewareDisconnected
 	}
 
 	q, err := ch.QueueDeclare(
@@ -36,7 +36,7 @@ func CreateQueueMiddleware(queueName string, connectionSettings m.ConnSettings) 
 		false,     // delete when unused
 		false,     // exclusive
 		false,     // no-wait
-		nil,       // ver que pongo aca
+		nil,       // args
 	)
 
 	if err != nil {
@@ -53,13 +53,13 @@ func CreateQueueMiddleware(queueName string, connectionSettings m.ConnSettings) 
 func CreateExchangeMiddleware(exchangeName string, keys []string, connectionSettings m.ConnSettings) (m.Middleware, error) {
 	conn, ch, err := connect(connectionSettings)
 	if err != nil {
-		return nil, err
+		return nil, m.ErrMessageMiddlewareDisconnected
 	}
 
 	err = ch.ExchangeDeclare(
 		exchangeName, // name
 		"direct",     // type
-		false,        // durability
+		true,         // durability
 		false,        // auto-deleted
 		false,        // internal
 		false,        // no-wait
