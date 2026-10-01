@@ -15,10 +15,13 @@ type QueueMiddleware struct {
 }
 
 func NewQueueMiddleware(conn *amqp.Connection, ch *amqp.Channel, queueName string) *QueueMiddleware {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &QueueMiddleware{
 		baseMiddleware: baseMiddleware{
-			conn: conn,
-			ch:   ch,
+			conn:   conn,
+			ch:     ch,
+			ctx:    ctx,
+			cancel: cancel,
 		},
 		queueName: queueName,
 	}
@@ -56,10 +59,20 @@ func (e *QueueMiddleware) StartConsuming(callbackFunc func(msg m.Message, ack fu
 		return m.ErrMessageMiddlewareMessage
 	}
 
-	for d := range msgs {
-		callbackFunc(m.Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
+	e.wg.Add(1)
+	defer e.wg.Done()
+
+	for {
+		select {
+		case <-e.ctx.Done():
+			return nil
+		case d, ok := <-msgs:
+			if !ok {
+				return m.ErrMessageMiddlewareDisconnected
+			}
+			callbackFunc(m.Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
+		}
 	}
-	return nil
 }
 
 func (e *QueueMiddleware) Send(msg m.Message) error {

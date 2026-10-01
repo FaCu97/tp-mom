@@ -17,10 +17,13 @@ type ExchangeMiddleware struct {
 }
 
 func NewExchangeMiddleware(conn *amqp.Connection, ch *amqp.Channel, exchangeName string, keys []string) *ExchangeMiddleware {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &ExchangeMiddleware{
 		baseMiddleware: baseMiddleware{
-			conn: conn,
-			ch:   ch,
+			conn:   conn,
+			ch:     ch,
+			ctx:    ctx,
+			cancel: cancel,
 		},
 		exchangeName: exchangeName,
 		routingKeys:  keys,
@@ -91,10 +94,20 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg m.Message, ack
 		return m.ErrMessageMiddlewareMessage
 	}
 
-	for d := range msgs {
-		callbackFunc(m.Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
+	e.wg.Add(1)
+	defer e.wg.Done()
+
+	for {
+		select {
+		case <-e.ctx.Done():
+			return nil
+		case d, ok := <-msgs:
+			if !ok {
+				return m.ErrMessageMiddlewareDisconnected
+			}
+			callbackFunc(m.Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
+		}
 	}
-	return nil
 }
 
 func (e *ExchangeMiddleware) Send(msg m.Message) error {

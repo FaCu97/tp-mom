@@ -1,6 +1,9 @@
 package factory
 
 import (
+	"context"
+	"sync"
+
 	m "github.com/7574-sistemas-distribuidos/tp-mom/golang/internal/middleware"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -9,6 +12,9 @@ type baseMiddleware struct {
 	conn        *amqp.Connection
 	ch          *amqp.Channel
 	consumerTag string
+	wg          sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 func (b *baseMiddleware) Close() error {
@@ -43,5 +49,11 @@ func (b *baseMiddleware) StopConsuming() error {
 			return m.ErrMessageMiddlewareDisconnected
 		}
 	}
+
+	if b.cancel != nil {
+		b.cancel()
+	}
+
+	b.wg.Wait()
 	return nil
 }
