@@ -12,14 +12,14 @@ func connect(connectionSettings m.ConnSettings) (*amqp.Connection, *amqp.Channel
 
 	conn, err := amqp.Dial(url)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, m.ErrMessageMiddlewareDisconnected
 	}
 
 	ch, err := conn.Channel()
 
 	if err != nil {
 		conn.Close()
-		return nil, nil, err
+		return nil, nil, m.ErrMessageMiddlewareDisconnected
 	}
 	return conn, ch, nil
 }
@@ -42,7 +42,7 @@ func CreateQueueMiddleware(queueName string, connectionSettings m.ConnSettings) 
 	if err != nil {
 		ch.Close()
 		conn.Close()
-		return nil, err
+		return nil, m.ErrMessageMiddlewareMessage
 	}
 
 	queue := NewQueueMiddleware(conn, ch, q.Name)
@@ -68,7 +68,7 @@ func CreateExchangeMiddleware(exchangeName string, keys []string, connectionSett
 	if err != nil {
 		ch.Close()
 		conn.Close()
-		return nil, err
+		return nil, m.ErrMessageMiddlewareMessage
 	}
 
 	exchange := NewExchangeMiddleware(conn, ch, exchangeName, keys)

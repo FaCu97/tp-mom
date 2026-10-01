@@ -115,7 +115,10 @@ func (e *ExchangeMiddleware) StopConsuming() error {
 	}
 
 	if e.ConsumerTag != "" {
-		return e.ch.Cancel(e.ConsumerTag, false)
+		err := e.ch.Cancel(e.ConsumerTag, false)
+		if err != nil {
+			return m.ErrMessageMiddlewareDisconnected
+		}
 	}
 	return nil
 }

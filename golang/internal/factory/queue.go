@@ -79,7 +79,10 @@ func (e *QueueMiddleware) StopConsuming() error {
 	}
 
 	if e.consumerTag != "" {
-		return e.ch.Cancel(e.consumerTag, false)
+		err := e.ch.Cancel(e.consumerTag, false)
+		if err != nil {
+			return m.ErrMessageMiddlewareDisconnected
+		}
 	}
 	return nil
 }
