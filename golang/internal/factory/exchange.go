@@ -91,11 +91,9 @@ func (e *ExchangeMiddleware) StartConsuming(callbackFunc func(msg m.Message, ack
 		return m.ErrMessageMiddlewareMessage
 	}
 
-	go func() {
-		for d := range msgs {
-			callbackFunc(m.Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
-		}
-	}()
+	for d := range msgs {
+		callbackFunc(m.Message{Body: string(d.Body)}, func() { d.Ack(false) }, func() { d.Nack(false, true) })
+	}
 	return nil
 }
 
@@ -120,7 +118,6 @@ func (e *ExchangeMiddleware) Send(msg m.Message) error {
 				Body:         []byte(msg.Body),
 			})
 		if err != nil {
-			e.Close()
 			return m.ErrMessageMiddlewareMessage
 		}
 	}

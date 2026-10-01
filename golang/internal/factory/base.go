@@ -17,6 +17,7 @@ func (b *baseMiddleware) Close() error {
 		if err != nil && err != amqp.ErrClosed {
 			return m.ErrMessageMiddlewareClose
 		}
+		b.ch = nil
 	}
 
 	if b.conn != nil {
@@ -24,6 +25,7 @@ func (b *baseMiddleware) Close() error {
 		if err != nil && err != amqp.ErrClosed {
 			return m.ErrMessageMiddlewareClose
 		}
+		b.conn = nil
 	}
 
 	return nil
